@@ -78,7 +78,8 @@
     <Compile Include="GameManager.cs" />
     <Compile Include="Game\ClientCard.cs" />
     <Compile Include="Game\Duel.cs" />
-    <Compile Include="Game\Enums\CtosMessage.cs" />
+    <Compile Include="Game\Enums\CmdMessage.cs" />
+    <Compile Include="Game\Enums\DevTypeMessage.cs" />
     <Compile Include="Game\Enums\GameState.cs" />
     <Compile Include="Game\Enums\PlayerChange.cs" />
     <Compile Include="Game\Enums\PlayerState.cs" />
@@ -91,6 +92,8 @@
     <Compile Include="Game\GameRoom.cs" />
     <Compile Include="Game\GameServerPacket.cs" />
     <Compile Include="Game\Player.cs" />
+    <Compile Include="Helper\Md5Helper.cs" />
+    <Compile Include="Helper\StringHelper.cs" />
     <Compile Include="Logger.cs" />
     <Compile Include="Program.cs" />
     <Compile Include="Properties\AssemblyInfo.cs" />
@@ -99,7 +102,6 @@
   </ItemGroup>
   <ItemGroup>
     <None Include="App.config" />
-    <None Include="ZxSharpService_TemporaryKey.pfx" />
   </ItemGroup>
   <ItemGroup>
     <ProjectReference Include="..\ZxWrapper\ZxWrapper.csproj">

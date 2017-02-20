@@ -4,17 +4,20 @@ namespace ZxSharpService.Game
 {
     public class GameRoom
     {
-        public GameRoom(GameConfig config)
-        {
-            MClients = new List<GameClient>();
-            Game = new Game(this, config);
-            IsOpen = true;
-        }
+        public readonly string RoomId;
 
         public Game Game { get; }
         public List<GameClient> MClients { get; }
         public bool IsOpen { get; private set; }
         private bool MClosePending { get; set; }
+
+        public GameRoom(string roomId,GameConfig config)
+        {
+            RoomId = roomId;
+            MClients = new List<GameClient>();
+            Game = new Game(this, config);
+            IsOpen = true;
+        }
 
         public void AddClient(GameClient client)
         {

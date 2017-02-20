@@ -1,5 +1,9 @@
-﻿using System.IO;
+﻿using System;
+using System.Data;
+using System.IO;
+using System.Text;
 using ZxSharpService.Game.Enums;
+using ZxSharpService.Helper;
 
 namespace ZxSharpService.Game
 {
@@ -7,62 +11,42 @@ namespace ZxSharpService.Game
     {
         private readonly BinaryReader _mReader;
 
-        public GameClientPacket(byte[] content)
+        public GameClientPacket(byte[] bytes)
         {
-            Content = content;
-            _mReader = new BinaryReader(new MemoryStream(Content));
+            _mReader = new BinaryReader(new MemoryStream(bytes));
         }
 
-        public byte[] Content { get; }
-
-        public CtosMessage ReadCtos()
+        /// <summary>
+        /// 解析设备类型
+        /// </summary>
+        /// <returns></returns>
+        public DevTypeMessage ReadDevType()
         {
-            return (CtosMessage) _mReader.ReadByte();
+            return (DevTypeMessage)_mReader.ReadByte();
         }
 
-        public byte ReadByte()
+        /// <summary>
+        /// 解析指令
+        /// </summary>
+        /// <returns></returns>
+        public CmdMessage ReadCmd()
         {
-            return _mReader.ReadByte();
+            return (CmdMessage)_mReader.ReadByte();
         }
 
-        public byte[] ReadToEnd()
-        {
-            return _mReader.ReadBytes((int) _mReader.BaseStream.Length - (int) _mReader.BaseStream.Position);
-        }
-
-        public sbyte ReadSByte()
+        public sbyte ReadSBytes()
         {
             return _mReader.ReadSByte();
         }
 
-        public short ReadInt16()
+        public string ReadStringToEnd()
         {
-            return _mReader.ReadInt16();
+            return Encoding.UTF8.GetString(ReadBytesToEnd());
         }
 
-        public int ReadInt32()
+        public byte[] ReadBytesToEnd()
         {
-            return _mReader.ReadInt32();
-        }
-
-        public uint ReadUInt32()
-        {
-            return _mReader.ReadUInt32();
-        }
-
-        public string ReadUnicode(int len)
-        {
-            return _mReader.ReadUnicode(len);
-        }
-
-        public long GetPosition()
-        {
-            return _mReader.BaseStream.Position;
-        }
-
-        public void SetPosition(long pos)
-        {
-            _mReader.BaseStream.Position = pos;
+            return _mReader.ReadBytes((int)_mReader.BaseStream.Length - (int)_mReader.BaseStream.Position);
         }
     }
 }

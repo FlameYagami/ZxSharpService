@@ -8,8 +8,8 @@ namespace ZxSharpService
     {
         public ServerConfig()
         {
-            ClientVersion = 0x1332;
-            ServerPort = 8911;
+            ClientVersion = 0x1;
+            ServerPort = 8989;
             Path = ".";
             ScriptFolder = "script";
             BanlistFile = "lflist.conf";

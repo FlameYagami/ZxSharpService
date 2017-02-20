@@ -2,19 +2,21 @@
 using System.Collections.Generic;
 using System.IO;
 using System.Net.Sockets;
+using System.Text;
+using ZxSharpService.Helper;
 
 namespace ZxSharpService.Game
 {
     public class GameClient
     {
         private readonly TcpClient _mClient;
+        private readonly BinaryReader _mReader;
+        private readonly Queue<GameClientPacket> _mRecvQueue;
+        private readonly Queue<byte[]> _mSendQueue;
         private bool _mClosePending;
         private bool _mDisconnected;
-        private readonly BinaryReader _mReader;
         private int _mReceivedLen;
-        private readonly Queue<GameClientPacket> _mRecvQueue;
         private GameRoom _mRoom;
-        private readonly Queue<byte[]> _mSendQueue;
 
         public GameClient(TcpClient client)
         {
@@ -97,34 +99,53 @@ namespace ZxSharpService.Game
             Player.OnDisconnected();
         }
 
+        /// <summary>
+        /// 检查连接状态
+        /// </summary>
         private void CheckDisconnected()
         {
             _mDisconnected = _mClient.Client.Poll(1, SelectMode.SelectRead) && _mClient.Available == 0;
         }
 
+        /// <summary>
+        /// 接收数据
+        /// </summary>
         private void NetworkReceive()
         {
-            if (_mClient.Available >= 2 && _mReceivedLen == -1)
-                _mReceivedLen = _mReader.ReadUInt16();
-
+            if (_mClient.Available >= 2 && _mReceivedLen == -1) _mReceivedLen = _mClient.Available;
             if (_mReceivedLen == -1 || _mClient.Available < _mReceivedLen) return;
-            var packet = new GameClientPacket(_mReader.ReadBytes(_mReceivedLen));
+            var bytes = _mReader.ReadBytes(_mReceivedLen);
             _mReceivedLen = -1;
+
+            // Md5校验
+            if (!Md5Helper.Check(bytes))
+            {
+                Logger.WriteError("Md5校验失败->" + Convert.ToString(bytes));
+                return;
+            }
+            Logger.WriteBytes(bytes);
+            // 去除Md5校验码
+            var removeMd5 = Md5Helper.RemoveMd5(bytes);
+            // 添加信息到队列当中
+            var packet = new GameClientPacket(removeMd5);
             lock (_mRecvQueue)
             {
                 _mRecvQueue.Enqueue(packet);
             }
         }
 
+        /// <summary>
+        /// 发送数据
+        /// </summary>
         private void NetworkSend()
         {
             while (_mSendQueue.Count > 0)
             {
-                var raw = _mSendQueue.Dequeue();
-                var stream = new MemoryStream(raw.Length + 2);
+                var calculateBytes = _mSendQueue.Dequeue();
+                var stream = new MemoryStream();
                 var writer = new BinaryWriter(stream);
-                writer.Write((ushort) raw.Length);
-                writer.Write(raw);
+                writer.Write(calculateBytes);
+                writer.Write(Md5Helper.Calculate(stream.ToArray()));
                 _mClient.Client.Send(stream.ToArray());
             }
         }

@@ -1,10 +1,19 @@
-﻿using ZxSharpService.Game.Enums;
+﻿using System.Runtime.CompilerServices;
+using System.Text;
+using ZxSharpService.Game.Enums;
+using ZxSharpService.Helper;
 
 namespace ZxSharpService.Game
 {
     public class Player
     {
         private readonly GameClient _mClient;
+        public Game Game { get; private set; }
+        public string Name { get; private set; }
+        public int Type { get; set; }
+        public PlayerState State { get; set; }
+        // 玩家网络状态
+        public bool IsAuthentified { get; private set; }
 
         public Player(GameClient client)
         {
@@ -12,19 +21,11 @@ namespace ZxSharpService.Game
             Type = (int) PlayerType.Undefined;
             State = PlayerState.None;
             _mClient = client;
-            TurnSkip = 0;
         }
-
-        public Game Game { get; private set; }
-        public string Name { get; private set; }
-        public bool IsAuthentified { get; private set; }
-        public int Type { get; set; }
-        public int TurnSkip { get; set; }
-        public PlayerState State { get; set; }
 
         public void Send(GameServerPacket packet)
         {
-            _mClient.Send(packet.GetContent());
+            _mClient.Send(packet.GetBytes());
         }
 
         public void Disconnect()
@@ -41,7 +42,7 @@ namespace ZxSharpService.Game
         public void SendTypeChange()
         {
             var packet = new GameServerPacket(StocMessage.TypeChange);
-            packet.Write((byte) (Type + (Game.HostPlayer.Equals(this) ? (int) PlayerType.Host : 0)));
+            //packet.Write((byte) (Type + (Game.HostPlayer.Equals(this) ? (int) PlayerType.Host : 0)));
             Send(packet);
         }
 
@@ -52,205 +53,127 @@ namespace ZxSharpService.Game
 
         public void Parse(GameClientPacket packet)
         {
-            var msg = packet.ReadCtos();
-            switch (msg)
+            // 关于指令处理
+            var devType = packet.ReadDevType();
+            // 关于指令处理
+            var cmd = packet.ReadCmd();
+            switch (cmd)
             {
-                case CtosMessage.PlayerInfo:
-                    OnPlayerInfo(packet);
+                case CmdMessage.CreateGame:
+                    CreateGame(packet);
                     break;
-                case CtosMessage.JoinGame:
-                    OnJoinGame(packet);
+                case CmdMessage.JoinGame:
+                    JoinGame(packet);
                     break;
-                case CtosMessage.CreateGame:
-                    OnCreateGame(packet);
-                    break;
-            }
-            if (!IsAuthentified)
-                return;
-            switch (msg)
-            {
-                case CtosMessage.Chat:
-                    OnChat(packet);
-                    break;
-                case CtosMessage.HsToDuelist:
-                    Game.MoveToDuelist(this);
-                    break;
-                case CtosMessage.HsToObserver:
-                    Game.MoveToObserver(this);
-                    break;
-                case CtosMessage.LeaveGame:
+                case CmdMessage.LeaveGame:
                     Game.RemovePlayer(this);
                     break;
-                case CtosMessage.HsReady:
-                    Game.SetReady(this, true);
-                    break;
-                case CtosMessage.HsNotReady:
-                    Game.SetReady(this, false);
-                    break;
-                case CtosMessage.HsKick:
-                    OnKick(packet);
-                    break;
-                case CtosMessage.HsStart:
-                    Game.StartDuel(this);
-                    break;
-                case CtosMessage.HandResult:
-                    OnHandResult(packet);
-                    break;
-                case CtosMessage.TpResult:
-                    OnTpResult(packet);
-                    break;
-                case CtosMessage.Response:
-                    OnResponse(packet);
-                    break;
-                case CtosMessage.Surrender:
-                    Game.Surrender(this, 0);
-                    break;
+            }
+            //switch (msg)
+            //{
+            //    case InstructMessage.Chat:
+            //        OnChat(packet);
+            //        break;
+            //    case InstructMessage.HsToDuelist:
+            //        Game.MoveToDuelist(this);
+            //        break;
+            //    case InstructMessage.HsToObserver:
+            //        Game.MoveToObserver(this);
+            //        break;
+            //    case InstructMessage.HsReady:
+            //        Game.SetReady(this, true);
+            //        break;
+            //    case InstructMessage.HsNotReady:
+            //        Game.SetReady(this, false);
+            //        break;
+            //    case InstructMessage.HsKick:
+            //        OnKick(packet);
+            //        break;
+            //    case InstructMessage.HsStart:
+            //        Game.StartDuel(this);
+            //        break;
+            //    case InstructMessage.HandResult:
+            //        OnHandResult(packet);
+            //        break;
+            //    case InstructMessage.TpResult:
+            //        OnTpResult(packet);
+            //        break;
+            //    case InstructMessage.Response:
+            //        OnResponse(packet);
+            //        break;
+            //    case InstructMessage.Surrender:
+            //        Game.Surrender(this, 0);
+            //        break;
+            //}
+        }
+
+        private void CreateGame(GameClientPacket packet)
+        {
+            var room = GameManager.CreateGame(new GameConfig());
+            if (null != room)
+            {
+                IsAuthentified = true;
+                Game = room.Game;
+                Name = packet.ReadStringToEnd();
+                Game.AddPlayer(this);
             }
         }
 
-        private void OnPlayerInfo(GameClientPacket packet)
+        private void JoinGame(GameClientPacket packet)
         {
-            if (Name != null)
-                return;
-            Name = packet.ReadUnicode(20);
-
-            if (string.IsNullOrEmpty(Name))
-                LobbyError("Username Required");
-        }
-
-        private void OnCreateGame(GameClientPacket packet)
-        {
-            if (string.IsNullOrEmpty(Name) || Type != (int) PlayerType.Undefined)
-                return;
-
             GameRoom room = null;
+            var data = packet.ReadStringToEnd().Split('#');
+            var name = data[0];
+            var roomId = data[1];
 
-            room = GameManager.CreateOrGetGame(new GameConfig(packet));
-
-            if (room == null)
+            if (GameManager.IsGameExists(roomId))
             {
-                LobbyError("Server Full");
-                return;
+                room = GameManager.GetGame(roomId);
             }
-
-            Game = room.Game;
-            Game.AddPlayer(this);
-            IsAuthentified = true;
-        }
-
-        private void OnJoinGame(GameClientPacket packet)
-        {
-            if (string.IsNullOrEmpty(Name) || Type != (int) PlayerType.Undefined)
-                return;
-
-            int version = packet.ReadInt16();
-            if (version < Program.Config.ClientVersion)
+            if (null != room)
             {
-                LobbyError("Version too low");
-                return;
-            }
-            if (version > Program.Config.ClientVersion)
-                ServerMessage("Warning: client version is higher than servers.");
-
-
-            packet.ReadInt32(); //gameid
-            packet.ReadInt16();
-
-            var joinCommand = packet.ReadUnicode(60);
-
-            GameRoom room = null;
-
-            if (GameManager.GameExists(joinCommand))
-            {
-                room = GameManager.GetGame(joinCommand);
-            }
-            else if (joinCommand.ToLower() == "random")
-            {
-                room = GameManager.GetRandomGame();
-
-                if (room == null)
-                {
-                    LobbyError("No Games");
-                    return;
-                }
-            }
-            else if (joinCommand.ToLower() == "spectate")
-            {
-                room = GameManager.SpectateRandomGame();
-
-                if (room == null)
-                {
-                    LobbyError("No Games");
-                    return;
-                }
-            }
-            else if (string.IsNullOrEmpty(joinCommand) || joinCommand.ToLower() == "tcg" || joinCommand.ToLower() == "ocg"
-                     || joinCommand.ToLower() == "ocg/tcg" || joinCommand.ToLower() == "tcg/ocg")
-            {
-                var filter = string.IsNullOrEmpty(joinCommand)
-                    ? -1
-                    : joinCommand.ToLower() == "ocg/tcg" || joinCommand.ToLower() == "tcg/ocg"
-                        ? 2
-                        : joinCommand.ToLower() == "tcg" ? 1 : 0;
-
-                room = GameManager.GetRandomGame(filter) ?? GameManager.CreateOrGetGame(new GameConfig(joinCommand));
-            }
-            else
-            {
-                room = GameManager.CreateOrGetGame(new GameConfig(joinCommand));
-            }
-
-            if (room == null)
-            {
-                LobbyError("Server Full");
-                return;
-            }
-            if (!room.IsOpen)
-            {
-                LobbyError("Game Finished");
-                return;
-            }
-
-            Game = room.Game;
-            Game.AddPlayer(this);
-            IsAuthentified = true;
+                IsAuthentified = false;
+                Game = room.Game;
+                Name = name;
+                Game.AddPlayer(this);
+            }  
         }
 
         private void OnChat(GameClientPacket packet)
         {
-            var msg = packet.ReadUnicode(256);
-            Game.Chat(this, msg);
+            //var msg = packet.ReadUnicode(256);
+            //Game.Chat(this, msg);
         }
 
         private void OnKick(GameClientPacket packet)
         {
-            int pos = packet.ReadByte();
-            Game.KickPlayer(this, pos);
+            //int pos = packet.ReadByte();
+            //Game.KickPlayer(this, pos);
         }
 
         private void OnHandResult(GameClientPacket packet)
         {
-            int res = packet.ReadByte();
-            Game.HandResult(this, res);
+            //int res = packet.ReadByte();
+            //Game.HandResult(this, res);
         }
 
         private void OnTpResult(GameClientPacket packet)
         {
-            var tp = packet.ReadByte() != 0;
-            Game.TpResult(this, tp);
+            //var tp = packet.ReadByte() != 0;
+            //Game.TpResult(this, tp);
         }
 
         private void OnResponse(GameClientPacket packet)
         {
-            if (Game.State != GameState.Duel)
-                return;
-            if (State != PlayerState.Response)
-                return;
-            var resp = packet.ReadToEnd();
-            if (resp.Length > 64)
-                return;
-            State = PlayerState.None;
-            Game.SetResponse(resp);
+            //if (Game.State != GameState.Duel)
+            //    return;
+            //if (State != PlayerState.Response)
+            //    return;
+            //var resp = packet.ReadBytesToEnd();
+            //if (resp.Length > 64)
+            //    return;
+            //State = PlayerState.None;
+            //Game.SetResponse(resp);
         }
 
         private void LobbyError(string message)
@@ -281,7 +204,7 @@ namespace ZxSharpService.Game
         {
             var finalmsg = "[Server] " + msg;
             var packet = new GameServerPacket(StocMessage.Chat);
-            packet.Write((short) PlayerType.Yellow);
+            //packet.Write((short) PlayerType.Yellow);
             packet.Write(finalmsg, finalmsg.Length + 1);
             Send(packet);
         }

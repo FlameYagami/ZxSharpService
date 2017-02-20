@@ -13,7 +13,8 @@ namespace ZxSharpService.Game
         {
             _mStream = new MemoryStream();
             _mWriter = new BinaryWriter(_mStream);
-            _mWriter.Write((byte) message);
+            Write((byte)4);
+            Write((byte)message);
         }
 
         public GameServerPacket(GameMessage message)
@@ -24,7 +25,7 @@ namespace ZxSharpService.Game
             _mWriter.Write((byte) message);
         }
 
-        public byte[] GetContent()
+        public byte[] GetBytes()
         {
             return _mStream.ToArray();
         }
@@ -42,6 +43,11 @@ namespace ZxSharpService.Game
         public void Write(sbyte value)
         {
             _mWriter.Write(value);
+        }
+
+        public void Write(string str)
+        {
+            _mWriter.Write(str);
         }
 
         public void Write(byte value)

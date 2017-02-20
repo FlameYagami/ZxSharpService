@@ -8,84 +8,46 @@ namespace ZxSharpService.Game
 {
     public class Game
     {
-        private readonly int[] _mBonustime;
-        private Duel _mDuel;
-        private int _mDuelCount;
         //private GameAnalyser m_analyser;
-        private readonly int[] _mHandResult;
-        private int _mLastresponse;
-
-        private int _mLasttick;
-        private bool _mMatchKill;
-
-        private readonly int[] _mMatchResult;
-
         //public Replay Replay { get; private set; }
-
         private readonly GameRoom _mRoom;
+        private readonly int[] _mBonustime;
+        private readonly int[] _mHandResult;
+        private readonly int[] _mTimelimit;
+
+        private Duel _mDuel;
+        private int _mLastresponse;
+        private int _mLasttick;
         private int _mStartplayer;
         private bool _mSwapped;
         private DateTime? _mTime;
 
-        private readonly int[] _mTimelimit;
-
-        public Game(GameRoom room, GameConfig config)
-        {
-            Config = config;
-            State = GameState.Lobby;
-            //IsMatch = config.Mode == 1;
-            //IsTag = config.Mode == 2;
-            CurrentPlayer = 0;
-            LifePoints = new int[2];
-            //Players = new Player[IsTag ? 4 : 2];
-            Players = new Player[2];
-            CurPlayers = new Player[2];
-            //IsReady = new bool[IsTag ? 4 : 2];
-            IsReady = new bool[2];
-            _mHandResult = new int[2];
-            _mTimelimit = new int[2];
-            _mBonustime = new int[2];
-            _mMatchResult = new int[3];
-            Observers = new List<Player>();
-            //if (config.LfList >= 0 && config.LfList < BanlistManager.Banlists.Count)
-            //    Banlist = BanlistManager.Banlists[config.LfList];
-            _mRoom = room;
-            //m_analyser = new GameAnalyser(this);
-        }
-
         public GameConfig Config { get; }
-        //public Banlist Banlist { get; private set; }
-        //public bool IsMatch { get; private set; }
-        //public bool IsTag { get; private set; }
         public bool IsTpSelect { get; private set; }
-
         public GameState State { get; private set; }
         public DateTime SideTimer { get; private set; }
         public DateTime TpTimer { get; private set; }
         public DateTime RpsTimer { get; private set; }
         public int TurnCount { get; set; }
-        public int CurrentPlayer { get; set; }
         public int[] LifePoints { get; set; }
-
         public Player[] Players { get; private set; }
-        public Player[] CurPlayers { get; }
+
+        public Player[] CurPlayers;
+
         public bool[] IsReady { get; private set; }
         public List<Player> Observers { get; }
-        public Player HostPlayer { get; private set; }
-
-        public void ReloadGameConfig(string gameinfo)
+        public Game(GameRoom room, GameConfig config)
         {
-            Config.Load(gameinfo);
-            //IsMatch = Config.Mode == 1;
-            //IsTag = Config.Mode == 2;
-            //Players = new Player[IsTag ? 4 : 2];
+            Config = config;
+            State = GameState.Lobby;
+            LifePoints = new int[2];
             Players = new Player[2];
-            //IsReady = new bool[IsTag ? 4 : 2];
             IsReady = new bool[2];
-            //if (Config.LfList >= 0 && Config.LfList < BanlistManager.Banlists.Count)
-            //    Banlist = BanlistManager.Banlists[Config.LfList];
-            LifePoints[0] = Config.StartLp;
-            LifePoints[1] = Config.StartLp;
+            _mHandResult = new int[2];
+            _mTimelimit = new int[2];
+            _mBonustime = new int[2];
+            Observers = new List<Player>();
+            _mRoom = room;
         }
 
         public void SendToAll(GameServerPacket packet)
@@ -126,121 +88,46 @@ namespace ZxSharpService.Game
                 player.Send(packet);
         }
 
-        public void SendToTeam(GameServerPacket packet, int team)
-        {
-            //if (!IsTag)
-            //    Players[team].Send(packet);
-            //else if (team == 0)
-            //{
-            //    Players[0].Send(packet);
-            //    Players[1].Send(packet);
-            //}
-            //else
-            //{
-            //    Players[2].Send(packet);
-            //    Players[3].Send(packet);
-            //}
-            Players[2].Send(packet);
-            Players[3].Send(packet);
-        }
-
         public void AddPlayer(Player player)
         {
-            if (State != GameState.Lobby)
-            {
-                player.Type = (int) PlayerType.Observer;
-                if (State == GameState.End)
-                    return;
-                SendJoinGame(player);
-                player.SendTypeChange();
-                player.Send(new GameServerPacket(StocMessage.DuelStart));
-                Observers.Add(player);
-                if (State == GameState.Duel)
-                    InitNewSpectator(player);
-                return;
-            }
-
-            if (HostPlayer == null)
-                HostPlayer = player;
-
             var pos = GetAvailablePlayerPos();
+            GameServerPacket enter;
             if (pos != -1)
             {
-                var enter = new GameServerPacket(StocMessage.HsPlayerEnter);
-                enter.Write(player.Name, 20);
-                enter.Write((byte) pos);
-                SendToAll(enter);
-
                 Players[pos] = player;
                 IsReady[pos] = false;
                 player.Type = pos;
+                if (0 == pos)
+                {
+                    enter = new GameServerPacket(StocMessage.CreateGame);
+                }
+                else
+                {
+                    enter = new GameServerPacket(StocMessage.JoinGame);
+                }
             }
             else
             {
-                var watch = new GameServerPacket(StocMessage.HsWatchChange);
-                watch.Write((short) (Observers.Count + 1));
-                SendToAll(watch);
-
-                player.Type = (int) PlayerType.Observer;
+                player.Type = (int)PlayerType.Observer;
                 Observers.Add(player);
+
+                enter = new GameServerPacket(StocMessage.JoinGame);
             }
-
-            SendJoinGame(player);
-            player.SendTypeChange();
-
-            for (var i = 0; i < Players.Length; i++)
-                if (Players[i] != null)
-                {
-                    var enter = new GameServerPacket(StocMessage.HsPlayerEnter);
-                    enter.Write(Players[i].Name, 20);
-                    enter.Write((byte) i);
-                    player.Send(enter);
-
-                    if (IsReady[i])
-                    {
-                        var change = new GameServerPacket(StocMessage.HsPlayerChange);
-                        change.Write((byte) ((i << 4) + (int) PlayerChange.Ready));
-                        player.Send(change);
-                    }
-                }
-
-            if (Observers.Count > 0)
-            {
-                var nwatch = new GameServerPacket(StocMessage.HsWatchChange);
-                nwatch.Write((short) Observers.Count);
-                player.Send(nwatch);
-            }
+            enter.Write((byte)player.Type);
+            enter.Write(int.Parse(_mRoom.RoomId));
+            enter.Write(player.Name);
+            SendToAll(enter);
         }
 
         public void RemovePlayer(Player player)
         {
-            if (player.Equals(HostPlayer) && State == GameState.Lobby)
+            var leave = new GameServerPacket(StocMessage.LeaveGame);
+            leave.Write((byte)player.Type);
+            leave.Write(player.Name);
+            SendToAll(leave);
+            if (player.Type.Equals(PlayerType.Host))
             {
                 _mRoom.Close();
-            }
-            else if (player.Type == (int) PlayerType.Observer)
-            {
-                Observers.Remove(player);
-                if (State == GameState.Lobby)
-                {
-                    var nwatch = new GameServerPacket(StocMessage.HsWatchChange);
-                    nwatch.Write((short) Observers.Count);
-                    SendToAll(nwatch);
-                }
-                player.Disconnect();
-            }
-            else if (State == GameState.Lobby)
-            {
-                Players[player.Type] = null;
-                IsReady[player.Type] = false;
-                var change = new GameServerPacket(StocMessage.HsPlayerChange);
-                change.Write((byte) ((player.Type << 4) + (int) PlayerChange.Leave));
-                SendToAll(change);
-                player.Disconnect();
-            }
-            else
-            {
-                Surrender(player, 4, true);
             }
         }
 
@@ -253,9 +140,6 @@ namespace ZxSharpService.Game
                 return;
             if (player.Type != (int) PlayerType.Observer)
             {
-                //if (!IsTag || IsReady[player.Type])
-                //    return;
-
                 pos = (player.Type + 1) % 4;
                 while (Players[pos] != null)
                     pos = (pos + 1) % 4;
@@ -320,7 +204,7 @@ namespace ZxSharpService.Game
         {
             var finalmsg = "[Server] " + msg;
             var packet = new GameServerPacket(StocMessage.Chat);
-            packet.Write((short) PlayerType.Yellow);
+            //packet.Write((short) PlayerType.Yellow);
             packet.Write(finalmsg, finalmsg.Length + 1);
             SendToAll(packet);
         }
@@ -364,7 +248,7 @@ namespace ZxSharpService.Game
         {
             if (State != GameState.Lobby)
                 return;
-            if (pos >= Players.Length || !player.Equals(HostPlayer) || player.Equals(Players[pos]) ||
+            if (pos >= Players.Length || !player.Type.Equals(PlayerType.Host) || player.Equals(Players[pos]) ||
                 Players[pos] == null)
                 return;
             RemovePlayer(Players[pos]);
@@ -374,7 +258,7 @@ namespace ZxSharpService.Game
         {
             if (State != GameState.Lobby)
                 return;
-            if (!player.Equals(HostPlayer))
+            if (!player.Type.Equals(PlayerType.Host))
                 return;
             for (var i = 0; i < Players.Length; i++)
             {
@@ -407,13 +291,11 @@ namespace ZxSharpService.Game
                 var packet = new GameServerPacket(StocMessage.HandResult);
                 packet.Write((byte) _mHandResult[0]);
                 packet.Write((byte) _mHandResult[1]);
-                SendToTeam(packet, 0);
                 SendToObservers(packet);
 
                 packet = new GameServerPacket(StocMessage.HandResult);
                 packet.Write((byte) _mHandResult[1]);
                 packet.Write((byte) _mHandResult[0]);
-                SendToTeam(packet, 1);
 
                 if (_mHandResult[0] == _mHandResult[1])
                 {
@@ -466,12 +348,12 @@ namespace ZxSharpService.Game
             var opt = 0;
 
             //Replay = new Replay((uint) seed, IsTag);
-            //Replay.Writer.WriteUnicode(Players[0].Name, 20);
-            //Replay.Writer.WriteUnicode(Players[1].Name, 20);
+            //Replay.Writer.WriteUnicode(Players[0].RoomId, 20);
+            //Replay.Writer.WriteUnicode(Players[1].RoomId, 20);
             //if (IsTag)
             //{
-            //    Replay.Writer.WriteUnicode(Players[2].Name, 20);
-            //    Replay.Writer.WriteUnicode(Players[3].Name, 20);
+            //    Replay.Writer.WriteUnicode(Players[2].RoomId, 20);
+            //    Replay.Writer.WriteUnicode(Players[3].RoomId, 20);
             //}
             //Replay.Writer.Write(Config.StartLp);
             //Replay.Writer.Write(Config.StartHand);
@@ -508,11 +390,9 @@ namespace ZxSharpService.Game
             packet.Write((short) _mDuel.QueryFieldCount(0, CardLocation.Dynamis));
             packet.Write((short) _mDuel.QueryFieldCount(1, CardLocation.Deck));
             packet.Write((short) _mDuel.QueryFieldCount(1, CardLocation.Dynamis));
-            SendToTeam(packet, 0);
 
             packet.SetPosition(2);
             packet.Write((byte) 1);
-            SendToTeam(packet, 1);
 
             packet.SetPosition(2);
             if (_mSwapped)
@@ -545,29 +425,22 @@ namespace ZxSharpService.Game
             win.Write((byte) reason);
             SendToAll(win);
 
-            MatchSaveResult(1 - team);
-
-            RecordWin(1 - team, reason, force);
+            //MatchSaveResult(1 - team);
 
             EndDuel(reason == 4);
         }
 
-        public void RecordWin(int team, int reason, bool force = false)
-        {
-            //Record user win here
-        }
-
         public void RefreshAll()
         {
-            RefreshMonsters(0);
-            RefreshMonsters(1);
-            RefreshSpells(0);
-            RefreshSpells(1);
+            RefreshSquare(0);
+            RefreshSquare(1);
+            RefreshResource(0);
+            RefreshResource(1);
             RefreshHand(0);
             RefreshHand(1);
         }
 
-        public void RefreshMonsters(int player, int flag = 0x81fff, bool useCache = true)
+        public void RefreshSquare(int player, int flag = 0x81fff, bool useCache = true)
         {
             //var result = _mDuel.QueryFieldCard(player, CardLocation.Square, flag, useCache);
             //var update = new GameServerPacket(GameMessage.UpdateData);
@@ -602,7 +475,7 @@ namespace ZxSharpService.Game
             //SendToObservers(update);
         }
 
-        public void RefreshSpells(int player, int flag = 0x681fff, bool useCache = true)
+        public void RefreshResource(int player, int flag = 0x681fff, bool useCache = true)
         {
             //var result = _mDuel.QueryFieldCard(player, CardLocation.ResourceZone, flag, useCache);
             //var update = new GameServerPacket(GameMessage.UpdateData);
@@ -921,57 +794,6 @@ namespace ZxSharpService.Game
             }
         }
 
-        public void MatchSaveResult(int player)
-        {
-            if (player < 2 && _mSwapped)
-                player = 1 - player;
-            if (player < 2)
-                _mStartplayer = 1 - player;
-            else
-                _mStartplayer = 1 - _mStartplayer;
-            _mMatchResult[_mDuelCount++] = player;
-        }
-
-        public void MatchKill()
-        {
-            _mMatchKill = true;
-        }
-
-        public bool MatchIsEnd()
-        {
-            if (_mMatchKill)
-                return true;
-            var wins = new int[3];
-            for (var i = 0; i < _mDuelCount; i++)
-                wins[_mMatchResult[i]]++;
-            return wins[0] == 2 || wins[1] == 2 || wins[0] + wins[1] + wins[2] == 3;
-        }
-
-        public int MatchWinner()
-        {
-            var wins = new int[3];
-            for (var i = 0; i < _mDuelCount; i++)
-                wins[_mMatchResult[i]]++;
-
-            var draw = wins[0] == wins[1];
-
-            if (draw)
-                return 2;
-
-            return wins[0] > wins[1] ? 0 : 1;
-        }
-
-        public void MatchSide()
-        {
-            if (IsReady[0] && IsReady[1])
-            {
-                State = GameState.Starting;
-                IsTpSelect = true;
-                TpTimer = DateTime.UtcNow;
-                Players[_mStartplayer].Send(new GameServerPacket(StocMessage.SelectTp));
-            }
-        }
-
         private int GetAvailablePlayerPos()
         {
             for (var i = 0; i < Players.Length; i++)
@@ -999,28 +821,6 @@ namespace ZxSharpService.Game
                     EndDuel(false);
                     break;
             }
-        }
-
-        private void SendJoinGame(Player player)
-        {
-            //var join = new GameServerPacket(StocMessage.JoinGame);
-            //join.Write(Banlist == null ? 0U : Banlist.Hash);
-            //join.Write((byte) Config.Rule);
-            //join.Write((byte) Config.Mode);
-            //join.Write(Config.EnablePriority);
-            //join.Write(Config.NoCheckDeck);
-            //join.Write(Config.NoShuffleDeck);
-            //// C++ padding: 5 bytes + 3 bytes = 8 bytes
-            //for (var i = 0; i < 3; i++)
-            //    join.Write((byte) 0);
-            //join.Write(Config.StartLp);
-            //join.Write((byte) Config.StartHand);
-            //join.Write((byte) Config.DrawCount);
-            //join.Write((short) Config.GameTimer);
-            //player.Send(join);
-
-            //if (State != GameState.Lobby)
-            //    SendDuelingPlayers(player);
         }
 
         private void SendDuelingPlayers(Player player)
@@ -1072,12 +872,6 @@ namespace ZxSharpService.Game
             var turn = new GameServerPacket(GameMessage.NewTurn);
             turn.Write((byte) 0);
             player.Send(turn);
-            if (CurrentPlayer == 1)
-            {
-                turn = new GameServerPacket(GameMessage.NewTurn);
-                turn.Write((byte) 0);
-                player.Send(turn);
-            }
 
             InitSpectatorLocation(player, CardLocation.Square);
             //InitSpectatorLocation(player, CardLocation.ResourceZone);

@@ -55,18 +55,25 @@ namespace ZxSharpService
 
         public void Process()
         {
-            GameManager.HandleRooms();
+            GameManager.RefreshRooms();
 
             while (IsListening && _mListener.Pending())
+            {
                 _mClients.Add(new GameClient(_mListener.AcceptTcpClient()));
+                Logger.WriteLine("接入客户端");
+            }
+
 
             var toRemove = new List<GameClient>();
+            // 服务器刷新客户端送来的消息以及发送给客户端消息
             foreach (var client in _mClients)
             {
                 client.Tick();
-                if (!client.IsConnected || client.InGame())
-                    toRemove.Add(client);
+                if (client.IsConnected && !client.InGame()) continue;
+                toRemove.Add(client);
+                Logger.WriteLine("移除客户端");
             }
+            // 移除无法连接的客户端
             while (toRemove.Count > 0)
             {
                 _mClients.Remove(toRemove[0]);

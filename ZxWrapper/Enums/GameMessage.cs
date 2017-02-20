@@ -25,7 +25,6 @@ namespace ZxWrapper.Enums
         SelectPlace = 18,
         SelectPosition = 19,
         SelectTribute = 20,
-        SortChain = 21,
         SelectCounter = 22,
         SelectSum = 23,
         SelectDisfield = 24,

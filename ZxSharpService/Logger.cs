@@ -1,5 +1,6 @@
 ﻿using System;
 using System.IO;
+using System.Text;
 
 namespace ZxSharpService
 {
@@ -38,6 +39,17 @@ namespace ZxSharpService
                     if (Program.Config.ConsoleLog)
                         Console.WriteLine(ex);
                 }
+        }
+
+        public static void WriteBytes(byte[] bytes)
+        {
+            var byteSttring = new StringBuilder();
+            foreach (var b in bytes)
+            {
+                byteSttring.Append(b);
+                byteSttring.Append(",");
+            }
+            WriteLine(byteSttring.ToString());
         }
     }
 }
