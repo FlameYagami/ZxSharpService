@@ -7,24 +7,24 @@ using ZxSharpService.Helper;
 
 namespace ZxSharpService.Game
 {
-    public class GameClient
+    public class Client
     {
         private readonly TcpClient _mClient;
         private readonly BinaryReader _mReader;
-        private readonly Queue<GameClientPacket> _mRecvQueue;
+        private readonly Queue<ClientPacket> _mRecvQueue;
         private readonly Queue<byte[]> _mSendQueue;
         private bool _mClosePending;
         private bool _mDisconnected;
         private int _mReceivedLen;
         private GameRoom _mRoom;
 
-        public GameClient(TcpClient client)
+        public Client(TcpClient client)
         {
             IsConnected = true;
             Player = new Player(this);
             _mClient = client;
             _mReader = new BinaryReader(_mClient.GetStream());
-            _mRecvQueue = new Queue<GameClientPacket>();
+            _mRecvQueue = new Queue<ClientPacket>();
             _mSendQueue = new Queue<byte[]>();
             _mReceivedLen = -1;
         }
@@ -127,7 +127,7 @@ namespace ZxSharpService.Game
             // 去除Md5校验码
             var removeMd5 = Md5Helper.RemoveMd5(bytes);
             // 添加信息到队列当中
-            var packet = new GameClientPacket(removeMd5);
+            var packet = new ClientPacket(removeMd5);
             lock (_mRecvQueue)
             {
                 _mRecvQueue.Enqueue(packet);
@@ -144,8 +144,9 @@ namespace ZxSharpService.Game
                 var calculateBytes = _mSendQueue.Dequeue();
                 var stream = new MemoryStream();
                 var writer = new BinaryWriter(stream);
+                writer.Write(calculateBytes.Length + 2);
                 writer.Write(calculateBytes);
-                writer.Write(Md5Helper.Calculate(stream.ToArray()));
+                writer.Write(Md5Helper.Calculate(calculateBytes));
                 _mClient.Client.Send(stream.ToArray());
             }
         }
@@ -159,7 +160,7 @@ namespace ZxSharpService.Game
             }
             while (count > 0)
             {
-                GameClientPacket packet = null;
+                ClientPacket packet = null;
                 lock (_mRecvQueue)
                 {
                     if (_mRecvQueue.Count > 0)

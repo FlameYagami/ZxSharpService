@@ -7,24 +7,24 @@ namespace ZxSharpService.Game
         public readonly string RoomId;
 
         public Game Game { get; }
-        public List<GameClient> MClients { get; }
+        public List<Client> MClients { get; }
         public bool IsOpen { get; private set; }
         private bool MClosePending { get; set; }
 
         public GameRoom(string roomId,GameConfig config)
         {
             RoomId = roomId;
-            MClients = new List<GameClient>();
+            MClients = new List<Client>();
             Game = new Game(this, config);
             IsOpen = true;
         }
 
-        public void AddClient(GameClient client)
+        public void AddClient(Client client)
         {
             MClients.Add(client);
         }
 
-        public void RemoveClient(GameClient client)
+        public void RemoveClient(Client client)
         {
             MClients.Remove(client);
         }

@@ -4,12 +4,10 @@ using System.Linq;
 using System.Text;
 using System.Threading.Tasks;
 
-namespace ZxWrapper
+namespace ZxSharpService.Game
 {
-    class Program
+    public class GameApi
     {
-        static void Main(string[] args)
-        {
-        }
+        
     }
 }

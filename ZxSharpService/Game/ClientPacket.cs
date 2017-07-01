@@ -7,11 +7,11 @@ using ZxSharpService.Helper;
 
 namespace ZxSharpService.Game
 {
-    public class GameClientPacket
+    public class ClientPacket
     {
         private readonly BinaryReader _mReader;
 
-        public GameClientPacket(byte[] bytes)
+        public ClientPacket(byte[] bytes)
         {
             _mReader = new BinaryReader(new MemoryStream(bytes));
         }
@@ -29,14 +29,19 @@ namespace ZxSharpService.Game
         /// 解析指令
         /// </summary>
         /// <returns></returns>
-        public CmdMessage ReadCmd()
+        public ClientMessage ReadCmd()
         {
-            return (CmdMessage)_mReader.ReadByte();
+            return (ClientMessage)_mReader.ReadByte();
         }
 
         public sbyte ReadSBytes()
         {
             return _mReader.ReadSByte();
+        }
+
+        public byte ReadByte()
+        {
+            return _mReader.ReadByte();
         }
 
         public string ReadStringToEnd()

@@ -1,7 +1,9 @@
 ﻿using System;
+using System.Data;
 using System.Diagnostics;
 using System.IO;
 using System.Threading;
+using ZxSharpService.Helper;
 
 namespace ZxSharpService
 {
@@ -18,6 +20,8 @@ namespace ZxSharpService
 
             Config = new ServerConfig();
             var loaded = args.Length > 1 ? Config.Load(args[1]) : Config.Load();
+
+            CardManager.Init();
 
             Logger.WriteLine(loaded ? "Config loaded." : "Unable to load config.txt, using default settings.");
 

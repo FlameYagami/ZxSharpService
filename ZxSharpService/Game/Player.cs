@@ -1,4 +1,5 @@
-﻿using System.Runtime.CompilerServices;
+﻿using System;
+using System.Runtime.CompilerServices;
 using System.Text;
 using ZxSharpService.Game.Enums;
 using ZxSharpService.Helper;
@@ -7,7 +8,7 @@ namespace ZxSharpService.Game
 {
     public class Player
     {
-        private readonly GameClient _mClient;
+        private readonly Client _mClient;
         public Game Game { get; private set; }
         public string Name { get; private set; }
         public int Type { get; set; }
@@ -15,7 +16,7 @@ namespace ZxSharpService.Game
         // 玩家网络状态
         public bool IsAuthentified { get; private set; }
 
-        public Player(GameClient client)
+        public Player(Client client)
         {
             Game = client.Game;
             Type = (int) PlayerType.Undefined;
@@ -23,7 +24,7 @@ namespace ZxSharpService.Game
             _mClient = client;
         }
 
-        public void Send(GameServerPacket packet)
+        public void Send(ServerPacket packet)
         {
             _mClient.Send(packet.GetBytes());
         }
@@ -36,12 +37,12 @@ namespace ZxSharpService.Game
         public void OnDisconnected()
         {
             if (IsAuthentified)
-                Game.RemovePlayer(this);
+                Game.LeaveGame(this);
         }
 
         public void SendTypeChange()
         {
-            var packet = new GameServerPacket(StocMessage.TypeChange);
+            var packet = new ServerPacket(ServiceMessage.TypeChange);
             //packet.Write((byte) (Type + (Game.HostPlayer.Equals(this) ? (int) PlayerType.Host : 0)));
             Send(packet);
         }
@@ -51,7 +52,7 @@ namespace ZxSharpService.Game
             return ReferenceEquals(this, player);
         }
 
-        public void Parse(GameClientPacket packet)
+        public void Parse(ClientPacket packet)
         {
             // 关于指令处理
             var devType = packet.ReadDevType();
@@ -59,14 +60,20 @@ namespace ZxSharpService.Game
             var cmd = packet.ReadCmd();
             switch (cmd)
             {
-                case CmdMessage.CreateGame:
+                case ClientMessage.CreateGame:
                     CreateGame(packet);
                     break;
-                case CmdMessage.JoinGame:
+                case ClientMessage.JoinGame:
                     JoinGame(packet);
                     break;
-                case CmdMessage.LeaveGame:
-                    Game.RemovePlayer(this);
+                case ClientMessage.LeaveGame:
+                    Game.LeaveGame(this);
+                    break;
+                 case ClientMessage.DuelistState:
+                    DuelistState(packet);
+                    break;
+                case ClientMessage.StartGame:
+                    Game.StartGame(this);
                     break;
             }
             //switch (msg)
@@ -80,18 +87,13 @@ namespace ZxSharpService.Game
             //    case InstructMessage.HsToObserver:
             //        Game.MoveToObserver(this);
             //        break;
-            //    case InstructMessage.HsReady:
-            //        Game.SetReady(this, true);
-            //        break;
             //    case InstructMessage.HsNotReady:
-            //        Game.SetReady(this, false);
+            //        Game.SetDuelistState(this, false);
             //        break;
             //    case InstructMessage.HsKick:
             //        OnKick(packet);
             //        break;
-            //    case InstructMessage.HsStart:
-            //        Game.StartDuel(this);
-            //        break;
+
             //    case InstructMessage.HandResult:
             //        OnHandResult(packet);
             //        break;
@@ -107,7 +109,7 @@ namespace ZxSharpService.Game
             //}
         }
 
-        private void CreateGame(GameClientPacket packet)
+        private void CreateGame(ClientPacket packet)
         {
             var room = GameManager.CreateGame(new GameConfig());
             if (null != room)
@@ -117,15 +119,20 @@ namespace ZxSharpService.Game
                 Name = packet.ReadStringToEnd();
                 Game.AddPlayer(this);
             }
+            else
+            {
+                var enter = new ServerPacket(ServiceMessage.JoinGame);
+                enter.Write((byte)PlayerType.Undefined);
+                Send(enter);
+            }
         }
 
-        private void JoinGame(GameClientPacket packet)
+        private void JoinGame(ClientPacket packet)
         {
             GameRoom room = null;
             var data = packet.ReadStringToEnd().Split('#');
             var name = data[0];
             var roomId = data[1];
-
             if (GameManager.IsGameExists(roomId))
             {
                 room = GameManager.GetGame(roomId);
@@ -136,34 +143,46 @@ namespace ZxSharpService.Game
                 Game = room.Game;
                 Name = name;
                 Game.AddPlayer(this);
-            }  
+            }
+            else
+            {
+                var enter = new ServerPacket(ServiceMessage.JoinGame);
+                enter.Write((byte)PlayerType.Undefined);
+                Send(enter);
+            }
         }
 
-        private void OnChat(GameClientPacket packet)
+        private void DuelistState(ClientPacket packet)
+        {
+            var ready = packet.ReadByte() == (int)PlayerChange.Ready;
+            Game.SetDuelistState(this, ready);
+        }
+
+        private void OnChat(ClientPacket packet)
         {
             //var msg = packet.ReadUnicode(256);
             //Game.Chat(this, msg);
         }
 
-        private void OnKick(GameClientPacket packet)
+        private void OnKick(ClientPacket packet)
         {
             //int pos = packet.ReadByte();
             //Game.KickPlayer(this, pos);
         }
 
-        private void OnHandResult(GameClientPacket packet)
+        private void OnHandResult(ClientPacket packet)
         {
             //int res = packet.ReadByte();
             //Game.HandResult(this, res);
         }
 
-        private void OnTpResult(GameClientPacket packet)
+        private void OnTpResult(ClientPacket packet)
         {
             //var tp = packet.ReadByte() != 0;
             //Game.TpResult(this, tp);
         }
 
-        private void OnResponse(GameClientPacket packet)
+        private void OnResponse(ClientPacket packet)
         {
             //if (Game.State != GameState.Duel)
             //    return;
@@ -178,32 +197,32 @@ namespace ZxSharpService.Game
 
         private void LobbyError(string message)
         {
-            var join = new GameServerPacket(StocMessage.JoinGame);
-            join.Write(0U);
-            join.Write((byte) 0);
-            join.Write((byte) 0);
-            join.Write(0);
-            join.Write(0);
-            join.Write(0);
-            // C++ padding: 5 bytes + 3 bytes = 8 bytes
-            for (var i = 0; i < 3; i++)
-                join.Write((byte) 0);
-            join.Write(0);
-            join.Write((byte) 0);
-            join.Write((byte) 0);
-            join.Write((short) 0);
-            Send(join);
+            //var join = new GameServerPacket(StocMessage.JoinGame);
+            //join.Write(0U);
+            //join.Write((byte) 0);
+            //join.Write((byte) 0);
+            //join.Write(0);
+            //join.Write(0);
+            //join.Write(0);
+            //// C++ padding: 5 bytes + 3 bytes = 8 bytes
+            //for (var i = 0; i < 3; i++)
+            //    join.Write((byte) 0);
+            //join.Write(0);
+            //join.Write((byte) 0);
+            //join.Write((byte) 0);
+            //join.Write((short) 0);
+            //Send(join);
 
-            var enter = new GameServerPacket(StocMessage.HsPlayerEnter);
-            enter.Write("[" + message + "]", 20);
-            enter.Write((byte) 0);
-            Send(enter);
+            //var enter = new GameServerPacket(StocMessage.PlayerEnter);
+            //enter.Write("[" + message + "]", 20);
+            //enter.Write((byte) 0);
+            //Send(enter);
         }
 
         private void ServerMessage(string msg)
         {
             var finalmsg = "[Server] " + msg;
-            var packet = new GameServerPacket(StocMessage.Chat);
+            var packet = new ServerPacket(ServiceMessage.Chat);
             //packet.Write((short) PlayerType.Yellow);
             packet.Write(finalmsg, finalmsg.Length + 1);
             Send(packet);

@@ -50,13 +50,13 @@ namespace ZxSharpService.Game
             _mRoom = room;
         }
 
-        public void SendToAll(GameServerPacket packet)
+        public void SendToAll(ServerPacket packet)
         {
             SendToPlayers(packet);
             SendToObservers(packet);
         }
 
-        public void SendToAllBut(GameServerPacket packet, Player except)
+        public void SendToAllBut(ServerPacket packet, Player except)
         {
             foreach (var player in Players)
                 if (player != null && !player.Equals(except))
@@ -66,7 +66,7 @@ namespace ZxSharpService.Game
                     player.Send(packet);
         }
 
-        public void SendToAllBut(GameServerPacket packet, int except)
+        public void SendToAllBut(ServerPacket packet, int except)
         {
             if (except < CurPlayers.Length)
                 SendToAllBut(packet, CurPlayers[except]);
@@ -74,7 +74,7 @@ namespace ZxSharpService.Game
                 SendToAll(packet);
         }
 
-        public void SendToPlayers(GameServerPacket packet)
+        public void SendToPlayers(ServerPacket packet)
         {
             foreach (var player in Players)
             {
@@ -82,7 +82,7 @@ namespace ZxSharpService.Game
             }
         }
 
-        public void SendToObservers(GameServerPacket packet)
+        public void SendToObservers(ServerPacket packet)
         {
             foreach (var player in Observers)
                 player.Send(packet);
@@ -91,110 +91,104 @@ namespace ZxSharpService.Game
         public void AddPlayer(Player player)
         {
             var pos = GetAvailablePlayerPos();
-            GameServerPacket enter;
+
+            var enter = new ServerPacket(ServiceMessage.PlayerEnter);
             if (pos != -1)
             {
                 Players[pos] = player;
                 IsReady[pos] = false;
                 player.Type = pos;
-                if (0 == pos)
-                {
-                    enter = new GameServerPacket(StocMessage.CreateGame);
-                }
-                else
-                {
-                    enter = new GameServerPacket(StocMessage.JoinGame);
-                }
+
+                enter.Write(0 == pos ? (byte)PlayerType.Host : (byte)PlayerType.Guest);
             }
             else
             {
                 player.Type = (int)PlayerType.Observer;
                 Observers.Add(player);
 
-                enter = new GameServerPacket(StocMessage.JoinGame);
+                enter.Write((byte)PlayerType.Observer);
             }
-            enter.Write((byte)player.Type);
-            enter.Write(int.Parse(_mRoom.RoomId));
             enter.Write(player.Name);
             SendToAll(enter);
+
+            SendJoinGame(player);
+            SendGameConfig(player);
+            SendDuelistInfo(player);
         }
 
-        public void RemovePlayer(Player player)
+        private void SendJoinGame(Player player)
         {
-            var leave = new GameServerPacket(StocMessage.LeaveGame);
+            var join = new ServerPacket(ServiceMessage.JoinGame);
+            join.Write((byte)player.Type);
+            join.Write(int.Parse(_mRoom.RoomId));
+            player.Send(join);
+        }
+
+        private void SendGameConfig(Player player)
+        {
+            var join = new ServerPacket(ServiceMessage.GameConfig);
+            join.Write((byte)Config.StartLp);
+            join.Write((byte)Config.StartHand);
+            join.Write((byte)Config.StartResouce);
+            join.Write((byte)Config.DrawCount);
+            join.Write((byte)Config.GameTimer);
+            join.Write(Config.ShuffleDeck ? (byte)1 : (byte)0);
+            player.Send(join);
+        }
+
+        private void SendDuelistInfo(Player player)
+        {
+            for (var i = 0; i < Players.Length; i++)
+            {
+                if (Players[i] == null) continue;
+                var info = new ServerPacket(ServiceMessage.DuelistInfo);
+                info.Write((byte)i);
+                info.Write(IsReady[i] ? (byte)PlayerChange.Ready: (byte)PlayerChange.NotReady);
+                info.Write(Players[i].Name);
+                player.Send(info);
+            }
+        }
+
+        public void LeaveGame(Player player)
+        {
+            var leave = new ServerPacket(ServiceMessage.LeaveGame);
             leave.Write((byte)player.Type);
             leave.Write(player.Name);
             SendToAll(leave);
+
             if (player.Type.Equals(PlayerType.Host))
             {
                 _mRoom.Close();
             }
-        }
-
-        public void MoveToDuelist(Player player)
-        {
-            if (State != GameState.Lobby)
-                return;
-            var pos = GetAvailablePlayerPos();
-            if (pos == -1)
-                return;
-            if (player.Type != (int) PlayerType.Observer)
+            else if (player.Type.Equals(PlayerType.Guest))
             {
-                pos = (player.Type + 1) % 4;
-                while (Players[pos] != null)
-                    pos = (pos + 1) % 4;
-
-                var change = new GameServerPacket(StocMessage.HsPlayerChange);
-                change.Write((byte) ((player.Type << 4) + pos));
-                SendToAll(change);
-
-                Players[player.Type] = null;
-                Players[pos] = player;
-                player.Type = pos;
-                player.SendTypeChange();
+                Players[1] = null;
             }
             else
             {
                 Observers.Remove(player);
-                Players[pos] = player;
-                player.Type = pos;
-
-                var enter = new GameServerPacket(StocMessage.HsPlayerEnter);
-                enter.Write(player.Name, 20);
-                enter.Write((byte) pos);
-                SendToAll(enter);
-
-                var nwatch = new GameServerPacket(StocMessage.HsWatchChange);
-                nwatch.Write((short) Observers.Count);
-                SendToAll(nwatch);
-
-                player.SendTypeChange();
             }
         }
 
-        public void MoveToObserver(Player player)
+        public void KickPlayer(Player player, int pos)
         {
-            if (State != GameState.Lobby)
-                return;
-            if (player.Type == (int) PlayerType.Observer)
-                return;
-            if (IsReady[player.Type])
-                return;
-            Players[player.Type] = null;
-            IsReady[player.Type] = false;
-            Observers.Add(player);
 
-            var change = new GameServerPacket(StocMessage.HsPlayerChange);
-            change.Write((byte) ((player.Type << 4) + (int) PlayerChange.Observe));
-            SendToAll(change);
+        }
 
-            player.Type = (int) PlayerType.Observer;
-            player.SendTypeChange();
+        /// <summary>
+        /// 设置选手准备状态,并广播给所有人
+        /// </summary>
+        public void SetDuelistState(Player player, bool ready)
+        {
+            var state = new ServerPacket(ServiceMessage.DuelistState);
+            state.Write((byte)player.Type);
+            state.Write(ready ? (byte)PlayerChange.Ready : (byte)PlayerChange.NotReady);
+            SendToAll(state);
         }
 
         public void Chat(Player player, string msg)
         {
-            var packet = new GameServerPacket(StocMessage.Chat);
+            var packet = new ServerPacket(ServiceMessage.Chat);
             packet.Write((short) player.Type);
             packet.Write(msg, msg.Length + 1);
             SendToAllBut(packet, player);
@@ -203,116 +197,57 @@ namespace ZxSharpService.Game
         public void ServerMessage(string msg)
         {
             var finalmsg = "[Server] " + msg;
-            var packet = new GameServerPacket(StocMessage.Chat);
+            var packet = new ServerPacket(ServiceMessage.Chat);
             //packet.Write((short) PlayerType.Yellow);
             packet.Write(finalmsg, finalmsg.Length + 1);
             SendToAll(packet);
         }
 
-        public void SetReady(Player player, bool ready)
+        public void StartGame(Player player)
         {
-            if (State != GameState.Lobby)
-                return;
-            if (player.Type == (int) PlayerType.Observer)
-                return;
-            if (IsReady[player.Type] == ready)
-                return;
-
-            if (ready)
-            {
-                var result = 1;
-                if (result != 0)
-                {
-                    var rechange = new GameServerPacket(StocMessage.HsPlayerChange);
-                    rechange.Write((byte) ((player.Type << 4) + (int) PlayerChange.NotReady));
-                    player.Send(rechange);
-                    var error = new GameServerPacket(StocMessage.ErrorMsg);
-                    error.Write((byte) 2); // ErrorMsg.DeckError
-                    // C++ padding: 1 byte + 3 bytes = 4 bytes
-                    for (var i = 0; i < 3; i++)
-                        error.Write((byte) 0);
-                    error.Write(result);
-                    player.Send(error);
-                    return;
-                }
-            }
-
-            IsReady[player.Type] = ready;
-
-            var change = new GameServerPacket(StocMessage.HsPlayerChange);
-            change.Write((byte) ((player.Type << 4) + (int) (ready ? PlayerChange.Ready : PlayerChange.NotReady)));
-            SendToAll(change);
-        }
-
-        public void KickPlayer(Player player, int pos)
-        {
-            if (State != GameState.Lobby)
-                return;
-            if (pos >= Players.Length || !player.Type.Equals(PlayerType.Host) || player.Equals(Players[pos]) ||
-                Players[pos] == null)
-                return;
-            RemovePlayer(Players[pos]);
-        }
-
-        public void StartDuel(Player player)
-        {
-            if (State != GameState.Lobby)
-                return;
-            if (!player.Type.Equals(PlayerType.Host))
-                return;
-            for (var i = 0; i < Players.Length; i++)
-            {
-                if (!IsReady[i])
-                    return;
-                if (Players[i] == null)
-                    return;
-            }
-
-            State = GameState.Hand;
-            SendToAll(new GameServerPacket(StocMessage.DuelStart));
-
-            SendHand();
+            // 启动本地API
+            SendToAll(new ServerPacket(ServiceMessage.StartGame));
         }
 
         public void HandResult(Player player, int result)
         {
-            if (State != GameState.Hand)
-                return;
-            if (player.Type == (int) PlayerType.Observer)
-                return;
-            if (result < 1 || result > 3)
-                return;
-            var type = player.Type;
-            if (_mHandResult[type] != 0)
-                return;
-            _mHandResult[type] = result;
-            if (_mHandResult[0] != 0 && _mHandResult[1] != 0)
-            {
-                var packet = new GameServerPacket(StocMessage.HandResult);
-                packet.Write((byte) _mHandResult[0]);
-                packet.Write((byte) _mHandResult[1]);
-                SendToObservers(packet);
+            //if (State != GameState.Hand)
+            //    return;
+            //if (player.Type == (int) PlayerType.Observer)
+            //    return;
+            //if (result < 1 || result > 3)
+            //    return;
+            //var type = player.Type;
+            //if (_mHandResult[type] != 0)
+            //    return;
+            //_mHandResult[type] = result;
+            //if (_mHandResult[0] != 0 && _mHandResult[1] != 0)
+            //{
+            //    var packet = new GameServerPacket(StocMessage.HandResult);
+            //    packet.Write((byte) _mHandResult[0]);
+            //    packet.Write((byte) _mHandResult[1]);
+            //    SendToObservers(packet);
 
-                packet = new GameServerPacket(StocMessage.HandResult);
-                packet.Write((byte) _mHandResult[1]);
-                packet.Write((byte) _mHandResult[0]);
+            //    packet = new GameServerPacket(StocMessage.HandResult);
+            //    packet.Write((byte) _mHandResult[1]);
+            //    packet.Write((byte) _mHandResult[0]);
 
-                if (_mHandResult[0] == _mHandResult[1])
-                {
-                    _mHandResult[0] = 0;
-                    _mHandResult[1] = 0;
-                    SendHand();
-                    return;
-                }
-                if (_mHandResult[0] == 1 && _mHandResult[1] == 2 ||
-                    _mHandResult[0] == 2 && _mHandResult[1] == 3 ||
-                    _mHandResult[0] == 3 && _mHandResult[1] == 1)
-                    _mStartplayer = 1;
-                else
-                    _mStartplayer = 0;
-                State = GameState.Starting;
-                Players[_mStartplayer].Send(new GameServerPacket(StocMessage.SelectTp));
-            }
+            //    if (_mHandResult[0] == _mHandResult[1])
+            //    {
+            //        _mHandResult[0] = 0;
+            //        _mHandResult[1] = 0;
+            //        SendHand();
+            //        return;
+            //    }
+            //    if (_mHandResult[0] == 1 && _mHandResult[1] == 2 ||
+            //        _mHandResult[0] == 2 && _mHandResult[1] == 3 ||
+            //        _mHandResult[0] == 3 && _mHandResult[1] == 1)
+            //        _mStartplayer = 1;
+            //    else
+            //        _mStartplayer = 0;
+            //    State = GameState.Starting;
+            //    Players[_mStartplayer].Send(new GameServerPacket(StocMessage.SelectTp));
+            //}
         }
 
         public void TpResult(Player player, bool result)
@@ -337,8 +272,8 @@ namespace ZxSharpService.Game
 
             State = GameState.Duel;
             var seed = Environment.TickCount;
-            _mDuel = Duel.Create((uint) seed);
-            var rand = new Random(seed);
+            //_mDuel = Duel.Create((uint) seed);
+            //var rand = new Random(seed);
 
             //_mDuel.SetAnalyzer(m_analyser.Analyse);
             _mDuel.SetErrorHandler(HandleError);
@@ -382,7 +317,7 @@ namespace ZxSharpService.Game
             //    }
             //}
 
-            var packet = new GameServerPacket(GameMessage.Start);
+            var packet = new ServerPacket(GameMessage.Start);
             packet.Write((byte) 0);
             packet.Write(Config.StartLp);
             packet.Write(Config.StartLp);
@@ -419,7 +354,7 @@ namespace ZxSharpService.Game
                     return;
             if (player.Type == (int) PlayerType.Observer)
                 return;
-            var win = new GameServerPacket(GameMessage.Win);
+            var win = new ServerPacket(GameMessage.Win);
             var team = player.Type;
             win.Write((byte) (1 - team));
             win.Write((byte) reason);
@@ -610,9 +545,9 @@ namespace ZxSharpService.Game
         {
             _mLastresponse = player;
             CurPlayers[player].State = PlayerState.Response;
-            SendToAllBut(new GameServerPacket(GameMessage.Waiting), player);
+            SendToAllBut(new ServerPacket(GameMessage.Waiting), player);
             TimeStart();
-            var packet = new GameServerPacket(StocMessage.TimeLimit);
+            var packet = new ServerPacket(ServiceMessage.TimeLimit);
             packet.Write((byte) player);
             packet.Write((byte) 0); // C++ padding
             packet.Write((short) _mTimelimit[player]);
@@ -678,7 +613,7 @@ namespace ZxSharpService.Game
 
         public void End()
         {
-            SendToAll(new GameServerPacket(StocMessage.DuelEnd));
+            SendToAll(new ServerPacket(ServiceMessage.DuelEnd));
             _mRoom.CloseDelayed();
         }
 
@@ -804,9 +739,9 @@ namespace ZxSharpService.Game
 
         private void SendHand()
         {
-            RpsTimer = DateTime.UtcNow;
-            var hand = new GameServerPacket(StocMessage.SelectHand);
-            SendToPlayers(hand);
+            //RpsTimer = DateTime.UtcNow;
+            //var hand = new GameServerPacket(StocMessage.SelectHand);
+            //SendToPlayers(hand);
         }
 
         private void Process()
@@ -825,16 +760,16 @@ namespace ZxSharpService.Game
 
         private void SendDuelingPlayers(Player player)
         {
-            for (var i = 0; i < Players.Length; i++)
-            {
-                var enter = new GameServerPacket(StocMessage.HsPlayerEnter);
-                var id = i;
-                if (_mSwapped)
-                    id = 1 - i;
-                enter.Write(Players[id].Name, 20);
-                enter.Write((byte) i);
-                player.Send(enter);
-            }
+            //for (var i = 0; i < Players.Length; i++)
+            //{
+            //    var enter = new GameServerPacket(StocMessage.PlayerEnter);
+            //    var id = i;
+            //    if (_mSwapped)
+            //        id = 1 - i;
+            //    enter.Write(Players[id].Name, 20);
+            //    enter.Write((byte) i);
+            //    player.Send(enter);
+            //}
         }
 
         private void InitNewSpectator(Player player)
@@ -845,7 +780,7 @@ namespace ZxSharpService.Game
             var hand1 = _mDuel.QueryFieldCount(0, CardLocation.Hand);
             var hand2 = _mDuel.QueryFieldCount(1, CardLocation.Hand);
 
-            var packet = new GameServerPacket(GameMessage.Start);
+            var packet = new ServerPacket(GameMessage.Start);
             packet.Write((byte) (_mSwapped ? 0x11 : 0x10));
             packet.Write(LifePoints[0]);
             packet.Write(LifePoints[1]);
@@ -855,21 +790,21 @@ namespace ZxSharpService.Game
             packet.Write((short) _mDuel.QueryFieldCount(1, CardLocation.Dynamis));
             player.Send(packet);
 
-            var draw = new GameServerPacket(GameMessage.Draw);
+            var draw = new ServerPacket(GameMessage.Draw);
             draw.Write((byte) 0);
             draw.Write((byte) hand1);
             for (var i = 0; i < hand1; i++)
                 draw.Write(0);
             player.Send(draw);
 
-            draw = new GameServerPacket(GameMessage.Draw);
+            draw = new ServerPacket(GameMessage.Draw);
             draw.Write((byte) 1);
             draw.Write((byte) hand2);
             for (var i = 0; i < hand2; i++)
                 draw.Write(0);
             player.Send(draw);
 
-            var turn = new GameServerPacket(GameMessage.NewTurn);
+            var turn = new ServerPacket(GameMessage.NewTurn);
             turn.Write((byte) 0);
             player.Send(turn);
 
@@ -991,7 +926,7 @@ namespace ZxSharpService.Game
             writer.WriteLine(error);
             writer.Close();
 
-            var packet = new GameServerPacket(StocMessage.Chat);
+            var packet = new ServerPacket(ServiceMessage.Chat);
             packet.Write((short) PlayerType.Observer);
             packet.Write(error, error.Length + 1);
             SendToAll(packet);

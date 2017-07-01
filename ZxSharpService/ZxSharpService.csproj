@@ -33,11 +33,11 @@
     <BootstrapperEnabled>true</BootstrapperEnabled>
   </PropertyGroup>
   <PropertyGroup Condition=" '$(Configuration)|$(Platform)' == 'Debug|AnyCPU' ">
-    <PlatformTarget>AnyCPU</PlatformTarget>
+    <PlatformTarget>x86</PlatformTarget>
     <DebugSymbols>true</DebugSymbols>
     <DebugType>full</DebugType>
     <Optimize>false</Optimize>
-    <OutputPath>bin\Debug\</OutputPath>
+    <OutputPath>D:\ZxService\</OutputPath>
     <DefineConstants>DEBUG;TRACE</DefineConstants>
     <ErrorReport>prompt</ErrorReport>
     <WarningLevel>4</WarningLevel>
@@ -66,6 +66,10 @@
   <ItemGroup>
     <Reference Include="System" />
     <Reference Include="System.Core" />
+    <Reference Include="System.Data.SQLite, Version=1.0.93.0, Culture=neutral, PublicKeyToken=db937bc2d44ff139, processorArchitecture=MSIL">
+      <SpecificVersion>False</SpecificVersion>
+      <HintPath>D:\ZxService\System.Data.SQLite.dll</HintPath>
+    </Reference>
     <Reference Include="System.Xml.Linq" />
     <Reference Include="System.Data.DataSetExtensions" />
     <Reference Include="Microsoft.CSharp" />
@@ -74,23 +78,26 @@
     <Reference Include="System.Xml" />
   </ItemGroup>
   <ItemGroup>
+    <Compile Include="CardManager.cs" />
+    <Compile Include="DeckManager.cs" />
     <Compile Include="Game\BinaryExtensions.cs" />
     <Compile Include="GameManager.cs" />
     <Compile Include="Game\ClientCard.cs" />
     <Compile Include="Game\Duel.cs" />
-    <Compile Include="Game\Enums\CmdMessage.cs" />
+    <Compile Include="Game\Enums\ClientMessage.cs" />
     <Compile Include="Game\Enums\DevTypeMessage.cs" />
     <Compile Include="Game\Enums\GameState.cs" />
     <Compile Include="Game\Enums\PlayerChange.cs" />
     <Compile Include="Game\Enums\PlayerState.cs" />
     <Compile Include="Game\Enums\PlayerType.cs" />
-    <Compile Include="Game\Enums\StocMessage.cs" />
+    <Compile Include="Game\Enums\ServiceMessage.cs" />
     <Compile Include="Game\Game.cs" />
-    <Compile Include="Game\GameClient.cs" />
-    <Compile Include="Game\GameClientPacket.cs" />
+    <Compile Include="Game\Client.cs" />
+    <Compile Include="Game\ClientPacket.cs" />
+    <Compile Include="Game\GameApi.cs" />
     <Compile Include="Game\GameConfig.cs" />
     <Compile Include="Game\GameRoom.cs" />
-    <Compile Include="Game\GameServerPacket.cs" />
+    <Compile Include="Game\ServerPacket.cs" />
     <Compile Include="Game\Player.cs" />
     <Compile Include="Helper\Md5Helper.cs" />
     <Compile Include="Helper\StringHelper.cs" />

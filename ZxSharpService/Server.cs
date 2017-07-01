@@ -8,12 +8,12 @@ namespace ZxSharpService
 {
     internal class Server
     {
-        private readonly List<GameClient> _mClients;
+        private readonly List<Client> _mClients;
         private TcpListener _mListener;
 
         public Server()
         {
-            _mClients = new List<GameClient>();
+            _mClients = new List<Client>();
         }
 
         public bool IsListening { get; private set; }
@@ -59,12 +59,12 @@ namespace ZxSharpService
 
             while (IsListening && _mListener.Pending())
             {
-                _mClients.Add(new GameClient(_mListener.AcceptTcpClient()));
+                _mClients.Add(new Client(_mListener.AcceptTcpClient()));
                 Logger.WriteLine("接入客户端");
             }
 
 
-            var toRemove = new List<GameClient>();
+            var toRemove = new List<Client>();
             // 服务器刷新客户端送来的消息以及发送给客户端消息
             foreach (var client in _mClients)
             {

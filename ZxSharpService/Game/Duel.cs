@@ -4,7 +4,6 @@ using System.IO;
 using System.Runtime.InteropServices;
 using System.Text;
 using ZxWrapper.Enums;
-using ZxWrapper.Helpers;
 
 namespace ZxSharpService.Game
 {
@@ -157,15 +156,6 @@ namespace ZxSharpService.Game
                     return result;
             }
             return 0;
-        }
-
-        public static Duel Create(uint seed)
-        {
-            var random = new MtRandom();
-            random.Reset(seed);
-            //IntPtr pDuel = Api.create_duel(random.Rand());
-            //return Create(pDuel);
-            return null;
         }
 
         internal static Duel Create(IntPtr pDuel)

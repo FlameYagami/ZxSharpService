@@ -4,12 +4,12 @@ using ZxWrapper.Enums;
 
 namespace ZxSharpService.Game
 {
-    public class GameServerPacket
+    public class ServerPacket
     {
         private readonly MemoryStream _mStream;
         private readonly BinaryWriter _mWriter;
 
-        public GameServerPacket(StocMessage message)
+        public ServerPacket(ServiceMessage message)
         {
             _mStream = new MemoryStream();
             _mWriter = new BinaryWriter(_mStream);
@@ -17,11 +17,11 @@ namespace ZxSharpService.Game
             Write((byte)message);
         }
 
-        public GameServerPacket(GameMessage message)
+        public ServerPacket(GameMessage message)
         {
             _mStream = new MemoryStream();
             _mWriter = new BinaryWriter(_mStream);
-            _mWriter.Write((byte) StocMessage.GameMsg);
+            _mWriter.Write((byte) ServiceMessage.GameMsg);
             _mWriter.Write((byte) message);
         }
 
